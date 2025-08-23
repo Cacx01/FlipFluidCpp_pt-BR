@@ -1071,26 +1071,8 @@ int main(){
     // Callbacks
     glfwSetWindowUserPointer(win, nullptr);
 
-    // Mouse drag for obstacle (only if not over ImGui)
-    glfwSetMouseButtonCallback(win, [](GLFWwindow* w, int button, int action, int mods) {
-        ImGuiIO& io = ImGui::GetIO();
-        if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            if (action == GLFW_PRESS && !io.WantCaptureMouse) {
-                double x, y;
-                glfwGetCursorPos(w, &x, &y);
-                startDrag(x, y, w);
-            }
-            if (action == GLFW_RELEASE) {
-                endDrag();
-            }
-        }
-    });
-    glfwSetCursorPosCallback(win, [](GLFWwindow* w, double x, double y) {
-        ImGuiIO& io = ImGui::GetIO();
-        if (!io.WantCaptureMouse && mouseDown) {
-            drag(x, y, w);
-        }
-    });
+
+    // Não usar callbacks de mouse do GLFW para lógica do simulador
 
     glfwSetKeyCallback(win, [](GLFWwindow* w, int key, int /*sc*/, int action, int /*mods*/){
         if(action==GLFW_PRESS){
@@ -1105,6 +1087,7 @@ int main(){
         std::chrono::duration<float> dt = now - last; last = now;
         // Fixed dt like JS
         (void)dt; // we keep scene.dt
+
 
         // Start ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
@@ -1122,6 +1105,30 @@ int main(){
         ImGui::Checkbox("Compensate Drift", &scene.compensateDrift);
         ImGui::Checkbox("Separate Particles", &scene.separateParticles);
         ImGui::End();
+
+        // Input do mouse para o simulador (apenas se o ImGui não estiver capturando)
+        ImGuiIO& io = ImGui::GetIO();
+        if (!io.WantCaptureMouse) {
+            // Detecta clique do mouse esquerdo
+            if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && !mouseDown) {
+                double x, y;
+                glfwGetCursorPos(win, &x, &y);
+                startDrag(x, y, win);
+            }
+            // Detecta arrasto
+            if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && mouseDown) {
+                double x, y;
+                glfwGetCursorPos(win, &x, &y);
+                drag(x, y, win);
+            }
+            // Detecta soltar botão
+            if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE && mouseDown) {
+                endDrag();
+            }
+        } else {
+            // Se o ImGui capturou o mouse, sempre encerra drag do simulador
+            if (mouseDown) endDrag();
+        }
 
         if(!scene.paused){
             scene.fluid->simulate(
