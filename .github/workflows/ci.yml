@@ -40,19 +40,24 @@ jobs:
       - name: Configure & build (Linux / macOS)
         if: matrix.os != 'windows-latest'
         run: |
+          # Ensure a clean build directory to avoid stale CMakeCache.txt from other projects
+          rm -rf build
           mkdir -p build
-          cd build
-          cmake .. -DCMAKE_BUILD_TYPE=Release
-          cmake --build . --config Release -- -j$(nproc)
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          CORES=$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
+          cmake --build build --config Release -- -j${CORES}
         shell: bash
 
       - name: Configure & build (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          mkdir build
-          cd build
-          cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
-          cmake --build . --config Release
+          # Ensure a clean build directory
+          if (Test-Path build) { Remove-Item -Recurse -Force build }
+          New-Item -ItemType Directory -Path build | Out-Null
+          $VCPKG_ROOT = Join-Path $env:GITHUB_WORKSPACE 'vcpkg'
+          $toolchain = Join-Path $VCPKG_ROOT 'scripts\buildsystems\vcpkg.cmake'
+          cmake -S . -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="$toolchain" -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
         shell: powershell
 
       - name: Package and upload (Linux / macOS)
