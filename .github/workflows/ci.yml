@@ -72,7 +72,7 @@ jobs:
         if: matrix.os != 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: flip_fluid-${{ matrix.os }}
+          name: pt-BR_flip_fluid-${{ matrix.os }}
           path: |
             build/flip_fluid
             build/flip_fluid*
@@ -81,7 +81,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: flip_fluid-windows
+          name: pt-BR_flip_fluid-windows
           path: |
             build/Release/flip_fluid.exe
             build/flip_fluid.exe
