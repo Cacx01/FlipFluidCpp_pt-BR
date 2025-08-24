@@ -1407,23 +1407,23 @@ int main(int argc, char** argv) {
         ImGui::NewFrame();
         
         // UI window
-        ImGui::Begin("Simulation Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
+        ImGui::Begin("Controles da Simulação", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
         ImGui::SetWindowPos(ImVec2(10, 10), ImGuiCond_Always);
-        ImGui::Checkbox("Paused", &scene.paused);
-        ImGui::SliderFloat("Simulation Speed", &scene.dt, 0.001f, 0.1f, "%.4f");
-        ImGui::SliderFloat("Flip Ratio", &scene.flipRatio, 0.0f, 1.0f);
-        ImGui::Checkbox("Show Particles", &scene.showParticles);
-        ImGui::Checkbox("Show Grid", &scene.showGrid);
+        ImGui::Checkbox("Pausar", &scene.paused);
+        ImGui::SliderFloat("Velocidade da simulação", &scene.dt, 0.001f, 0.1f, "%.4f");
+        ImGui::SliderFloat("Razão PIC/FLIP (Age como uma viscosidade)", &scene.flipRatio, 0.0f, 1.0f);
+        ImGui::Checkbox("Mostrar particulas", &scene.showParticles);
+        ImGui::Checkbox("Mostrar Grade", &scene.showGrid);
         if (scene.showGrid){
-            ImGui::Checkbox("Show Grid Lines", &scene.showGridLines);
+            ImGui::Checkbox("Mostrar Linhas de Grade", &scene.showGridLines);
 
         }
-        ImGui::Checkbox("Render Obstacle", &scene.renderObstacle);
-        ImGui::SliderFloat("Gravity X", &scene.gravityX, -20.0f, 20.0f);
-        ImGui::SliderFloat("Gravity Y", &scene.gravityY, -20.0f, 20.0f);
-        ImGui::Checkbox("Compensate Drift", &scene.compensateDrift);
-        ImGui::Checkbox("Separate Particles", &scene.separateParticles);
-        ImGui::Checkbox("Show Framerate", &scene.showFramerate);
+        ImGui::Checkbox("Mostrar Obstáculo", &scene.renderObstacle);
+        ImGui::SliderFloat("Gravidade em X", &scene.gravityX, -20.0f, 20.0f);
+        ImGui::SliderFloat("Gravidade em Y", &scene.gravityY, -20.0f, 20.0f);
+        ImGui::Checkbox("Compensar Drift", &scene.compensateDrift);
+        ImGui::Checkbox("Separador de Partículas", &scene.separateParticles);
+        ImGui::Checkbox("Mostrar FPS", &scene.showFramerate);
         ImGui::End();
         
         if (!scene.paused) {
@@ -1443,7 +1443,7 @@ int main(int argc, char** argv) {
             int winWidth, winHeight;
             glfwGetFramebufferSize(win, &winWidth, &winHeight);
             
-            ImGui::Begin("Framerate", nullptr, 
+            ImGui::Begin("FPS", nullptr, 
                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | 
                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | 
                 ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove);
