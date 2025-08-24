@@ -1177,7 +1177,46 @@ void endDrag() {
 
 // ------------------------------ Main ------------------------------
 
-int main() {
+int main(int argc, char** argv) {
+#ifdef __linux__
+    // If there's no controlling TTY (e.g. launched from file manager), open a terminal
+    // and re-run the program there so interactive prompts work.
+    if (!isatty(STDIN_FILENO)) {
+        // Build a shell-escaped command string for the program and its args
+        std::string self;
+        char resolved[PATH_MAX];
+        if (realpath(argv[0], resolved)) self = resolved; else self = argv[0];
+        std::string cmd = "\"" + self + "\"";
+        for (int i = 1; i < argc; ++i) {
+            cmd += " \"" + std::string(argv[i]) + "\"";
+        }
+
+        const char* terms[] = {"x-terminal-emulator","xterm","konsole","xfce4-terminal","gnome-terminal","mate-terminal","urxvt", nullptr};
+        for (int ti = 0; terms[ti] != nullptr; ++ti) {
+            std::string term = terms[ti];
+            // Check availability with 'which'
+            std::string whichCmd = "which " + term + " >/dev/null 2>&1";
+            if (system(whichCmd.c_str()) != 0) continue;
+
+            pid_t pid = fork();
+            if (pid == 0) {
+                // Child: exec the terminal with appropriate arguments
+                if (term == "gnome-terminal" || term == "konsole" || term == "xfce4-terminal" || term == "mate-terminal") {
+                    execlp(term.c_str(), term.c_str(), "--", "bash", "-c", cmd.c_str(), (char*)NULL);
+                } else {
+                    execlp(term.c_str(), term.c_str(), "-e", cmd.c_str(), (char*)NULL);
+                }
+                // If exec failed, exit child
+                _exit(127);
+            } else if (pid > 0) {
+                // Parent: we spawned a terminal to run the app; exit so only the terminal instance runs
+                return 0;
+            }
+        }
+        // If no terminal emulator found, continue silently and the prompts may not be visible
+    }
+#endif
+
     if (!glfwInit()) {
         fprintf(stderr, "GLFW init failed\n");
         return 1;
