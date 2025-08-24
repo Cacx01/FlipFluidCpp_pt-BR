@@ -5,7 +5,26 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find packages
-find_package(glfw3 REQUIRED)
+find_package(glfw3 CONFIG)
+if(NOT glfw3_FOUND)
+    # Fallback: try to find GLFW with pkg-config or system paths
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(GLFW3 QUIET glfw3)
+    endif()
+    if(NOT GLFW3_FOUND)
+        # Manual fallback for static builds
+        find_library(GLFW_LIBRARY NAMES glfw3 glfw PATHS ${CMAKE_PREFIX_PATH}/lib)
+        find_path(GLFW_INCLUDE_DIR GLFW/glfw3.h PATHS ${CMAKE_PREFIX_PATH}/include)
+        if(GLFW_LIBRARY AND GLFW_INCLUDE_DIR)
+            add_library(glfw STATIC IMPORTED)
+            set_target_properties(glfw PROPERTIES IMPORTED_LOCATION ${GLFW_LIBRARY})
+            set_target_properties(glfw PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${GLFW_INCLUDE_DIR})
+        else()
+            message(FATAL_ERROR "GLFW not found")
+        endif()
+    endif()
+endif()
 find_package(OpenGL REQUIRED)
 
 # Add executable
@@ -62,8 +81,14 @@ target_sources(flip_fluid PRIVATE ${IMGUI_SOURCES})
 target_sources(flip_fluid PRIVATE glad/src/glad.c)
 
 # Link libraries
+if(TARGET glfw)
+    target_link_libraries(flip_fluid glfw)
+elseif(GLFW3_FOUND)
+    target_link_libraries(flip_fluid ${GLFW3_LIBRARIES})
+    target_include_directories(flip_fluid PRIVATE ${GLFW3_INCLUDE_DIRS})
+endif()
+
 target_link_libraries(flip_fluid 
-    glfw 
     OpenGL::GL
     ${CMAKE_DL_LIBS}
 )
@@ -75,6 +100,12 @@ endif()
 
 if(APPLE)
     target_link_libraries(flip_fluid "-framework Cocoa" "-framework IOKit" "-framework CoreVideo")
+endif()
+
+# Windows static linking requirements
+if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    # For static GLFW on Windows, we need additional system libraries
+    target_link_libraries(flip_fluid user32 gdi32 shell32)
 endif()
 
 # Compiler-specific options
