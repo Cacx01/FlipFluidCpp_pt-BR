@@ -1293,12 +1293,12 @@ int main(int argc, char** argv) {
     int winW = 1280, winH = 720;
 
     // Prompt user for desired simulation (window) size before creating the window
-    std::cout << "Enter simulation window width in pixels (default 1280): ";
+    std::cout << "Insira o comprimento da simulação em pixels (Padrão: 1280): ";
     std::string inW; std::getline(std::cin, inW);
     if (!inW.empty()) {
         try { winW = std::max(100, std::stoi(inW)); } catch(...) { /* keep default */ }
     }
-    std::cout << "Enter simulation window height in pixels (default 720): ";
+    std::cout << "Insira a altura da simulação em pixels (Padrão: 720): ";
     std::string inH; std::getline(std::cin, inH);
     if (!inH.empty()) {
         try { winH = std::max(100, std::stoi(inH)); } catch(...) { /* keep default */ }
@@ -1306,7 +1306,7 @@ int main(int argc, char** argv) {
 
     // Prompt user for grid resolution (number of cells along height)
     int gridRes = 100;
-    std::cout << "Enter grid resolution (cells along height, default 100): ";
+    std::cout << "Insira a resolução da grade de simulação (Quantidade de células pela altura, Padrão: 100): ";
     std::string inRes; std::getline(std::cin, inRes);
     if (!inRes.empty()) {
         try { gridRes = std::max(10, std::min(2000, std::stoi(inRes))); } catch(...) { /* keep default */ }
