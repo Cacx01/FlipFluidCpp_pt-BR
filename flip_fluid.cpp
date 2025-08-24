@@ -737,6 +737,7 @@ struct Scene {
     float obstacleVelX = 0.0f, obstacleVelY = 0.0f;
     bool showParticles = false;
     bool showGrid = true;
+    bool showGridLines = false;
     FlipFluid* fluid = nullptr;
     
     float simWidth = 0.0f, simHeight = 0.0f;
@@ -747,11 +748,12 @@ struct Scene {
 struct GLObjects {
     GLuint pointProg = 0, meshProg = 0;
     GLuint gridVBO = 0, gridColorVBO = 0;
+    GLuint gridLinesVBO = 0;
     GLuint particleVBO = 0, particleColorVBO = 0;
     GLuint diskVBO = 0, diskEBO = 0;
     GLuint globalVAO = 0;
     // VAOs to store vertex attribute state so we don't reconfigure every frame
-    GLuint gridVAO = 0, particleVAO = 0, diskVAO = 0;
+    GLuint gridVAO = 0, gridLinesVAO = 0, particleVAO = 0, diskVAO = 0;
 
     // Cached uniform locations for point shader
     GLint point_dom_loc = -1;
@@ -791,7 +793,7 @@ void createOrUpdateGridVBO() {
     glBufferData(GL_ARRAY_BUFFER, cellCenters.size() * sizeof(float), cellCenters.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    // Setup/grid VAO once
+    // Setup grid VAO once
     if (glb.gridVAO == 0) {
         glGenVertexArrays(1, &glb.gridVAO);
         glBindVertexArray(glb.gridVAO);
@@ -804,6 +806,41 @@ void createOrUpdateGridVBO() {
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+
+    // Create grid lines for wireframe
+    if (glb.gridLinesVBO == 0) {
+        glGenBuffers(1, &glb.gridLinesVBO);
+        
+        static std::vector<float> lines;
+        lines.clear();
+        
+        // Horizontal lines
+        for (int j = 0; j <= f.fNumY; j++) {
+            float y = j * f.h;
+            lines.push_back(0.0f); lines.push_back(y);
+            lines.push_back(f.fNumX * f.h); lines.push_back(y);
+        }
+        
+        // Vertical lines
+        for (int i = 0; i <= f.fNumX; i++) {
+            float x = i * f.h;
+            lines.push_back(x); lines.push_back(0.0f);
+            lines.push_back(x); lines.push_back(f.fNumY * f.h);
+        }
+        
+        glBindBuffer(GL_ARRAY_BUFFER, glb.gridLinesVBO);
+        glBufferData(GL_ARRAY_BUFFER, lines.size() * sizeof(float), lines.data(), GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        
+        // Setup grid lines VAO
+        glGenVertexArrays(1, &glb.gridLinesVAO);
+        glBindVertexArray(glb.gridLinesVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, glb.gridLinesVBO);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
@@ -1087,7 +1124,9 @@ void draw() {
         glUniform2f(glb.point_dom_loc, scene.simWidth, scene.simHeight);
         // Compute a consistent pixel scale from simulation units to screen pixels
         float pixelScale = std::min(static_cast<float>(width) / scene.simWidth, static_cast<float>(height) / scene.simHeight);
-        float pointSize = 0.8f * f.h * pixelScale;
+        // Ensure point size covers the grid spacing to eliminate gaps (add small overlap)
+        float rawPointSize = 1.f * f.h * pixelScale;
+        float pointSize = std::max(1.0f, std::ceil(rawPointSize * 1.05f));
         glUniform1f(glb.point_psize_loc, pointSize);
         glUniform1f(glb.point_drawDisk_loc, 0.0f);
         
@@ -1098,6 +1137,19 @@ void draw() {
         glDrawArrays(GL_POINTS, 0, scene.fluid->fNumCells);
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
+        
+        // Draw grid lines (optional)
+        if (scene.showGridLines) {
+            glUseProgram(glb.meshProg);
+            glUniform2f(glb.mesh_dom_loc, scene.simWidth, scene.simHeight);
+            glUniform3f(glb.mesh_color_loc, 0.f, 0.f, 0.f); // Dark gray lines
+            glUniform2f(glb.mesh_tr_loc, 0.0f, 0.0f);
+            glUniform1f(glb.mesh_sc_loc, 1.0f);
+            glBindVertexArray(glb.gridLinesVAO);
+            int numLines = (f.fNumY + 1) + (f.fNumX + 1); // horizontal + vertical lines
+            glDrawArrays(GL_LINES, 0, numLines * 2);
+            glBindVertexArray(0);
+        }
     }
     
     // Particles
@@ -1360,6 +1412,10 @@ int main(int argc, char** argv) {
         ImGui::SliderFloat("Flip Ratio", &scene.flipRatio, 0.0f, 1.0f);
         ImGui::Checkbox("Show Particles", &scene.showParticles);
         ImGui::Checkbox("Show Grid", &scene.showGrid);
+        if (scene.showGrid){
+            ImGui::Checkbox("Show Grid Lines", &scene.showGridLines);
+
+        }
         ImGui::Checkbox("Render Obstacle", &scene.renderObstacle);
         ImGui::SliderFloat("Gravity X", &scene.gravityX, -20.0f, 20.0f);
         ImGui::SliderFloat("Gravity Y", &scene.gravityY, -20.0f, 20.0f);
