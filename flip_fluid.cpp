@@ -7,6 +7,7 @@
 #include <array>
 #include <chrono>
 #include <algorithm>
+#include <iostream>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -870,8 +871,8 @@ void setupScene(float canvasWidth, float canvasHeight) {
     for (int i = 0; i < f->fNumX; i++) {
         for (int j = 0; j < f->fNumY; j++) {
             float s = 1.0f; // fluid
-            if (i == 0 || i == f->fNumX - 1 || j == 0) {
-                s = 0.0f; // solid
+            if (i == 0 || i == f->fNumX - 1 || j == 0 || j == f->fNumY - 1) {
+                s = 0.0f; // solid (walls, floor, and roof)
             }
             f->s[i * n + j] = s;
         }
@@ -1044,6 +1045,19 @@ int main() {
 #endif
     
     int winW = 1280, winH = 720;
+
+    // Prompt user for desired simulation (window) size before creating the window
+    std::cout << "Enter simulation window width in pixels (default 1280): ";
+    std::string inW; std::getline(std::cin, inW);
+    if (!inW.empty()) {
+        try { winW = std::max(100, std::stoi(inW)); } catch(...) { /* keep default */ }
+    }
+    std::cout << "Enter simulation window height in pixels (default 720): ";
+    std::string inH; std::getline(std::cin, inH);
+    if (!inH.empty()) {
+        try { winH = std::max(100, std::stoi(inH)); } catch(...) { /* keep default */ }
+    }
+
     GLFWwindow* win = glfwCreateWindow(winW, winH, "FLIP Fluid (C++/OpenGL)", nullptr, nullptr);
     if (!win) {
         fprintf(stderr, "Window create failed\n");
