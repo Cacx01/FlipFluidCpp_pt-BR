@@ -34,7 +34,7 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
           & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
-          & $env:GITHUB_WORKSPACE\vcpkg\vcpkg.exe install glfw3:x64-windows
+          & $env:GITHUB_WORKSPACE\vcpkg\vcpkg.exe install glfw3:x64-windows-static
         shell: powershell
 
       - name: Configure & build (Linux / macOS)
@@ -59,22 +59,6 @@ jobs:
           cmake -S . -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="$toolchain" -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
 
-          # Try to locate glfw3.dll under the vcpkg installed tree and copy it next to the exe
-          $dll = Get-ChildItem -Path (Join-Path $VCPKG_ROOT 'installed') -Filter 'glfw3.dll' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($dll -ne $null) {
-            Copy-Item $dll.FullName -Destination 'build\Release\' -Force
-            Write-Host "Copied $($dll.FullName) to build\\Release"
-          } else {
-            Write-Host "glfw3.dll not found under $VCPKG_ROOT\installed. Attempting common locations..."
-            $alt = Join-Path $VCPKG_ROOT 'installed\x64-windows\bin\glfw3.dll'
-            if (Test-Path $alt) {
-              Copy-Item $alt -Destination 'build\Release\' -Force
-              Write-Host "Copied $alt to build\\Release"
-            } else {
-              Write-Host "glfw3.dll not found. Build may still succeed but runtime DLL will be missing."
-            }
-          }
-
           # List build output for debugging
           Write-Host "Contents of build\\Release:"
           Get-ChildItem -Path 'build\\Release' -Force | ForEach-Object { Write-Host $_.FullName }
@@ -96,5 +80,4 @@ jobs:
           name: flip_fluid-windows
           path: |
             build/Release/flip_fluid.exe
-            build/Release/*.dll
             build/flip_fluid.exe
