@@ -5,8 +5,6 @@ on:
     branches: [ main ]
   pull_request:
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
   build:
@@ -35,31 +33,26 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           git clone https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
-          $VCPKG_ROOT = Join-Path $env:GITHUB_WORKSPACE 'vcpkg'
-          & "$VCPKG_ROOT\bootstrap-vcpkg.bat"
-          & "$VCPKG_ROOT\vcpkg.exe" install glfw3:x64-windows
+          & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
+          & $env:GITHUB_WORKSPACE\vcpkg\vcpkg.exe install glfw3:x64-windows
         shell: powershell
 
       - name: Configure & build (Linux / macOS)
         if: matrix.os != 'windows-latest'
         run: |
-          # Ensure a clean build directory to avoid stale CMakeCache.txt from other projects
-          rm -rf build
           mkdir -p build
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release -- -j$(nproc)
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release -- -j$(nproc)
         shell: bash
 
       - name: Configure & build (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          # Ensure a clean build directory
-          if (Test-Path build) { Remove-Item -Recurse -Force build }
-          New-Item -ItemType Directory -Path build | Out-Null
-          $VCPKG_ROOT = Join-Path $env:GITHUB_WORKSPACE 'vcpkg'
-          $toolchain = Join-Path $VCPKG_ROOT 'scripts\buildsystems\vcpkg.cmake'
-          cmake -S . -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="$toolchain" -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release
+          mkdir build
+          cd build
+          cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release
         shell: powershell
 
       - name: Package and upload (Linux / macOS)
@@ -79,95 +72,3 @@ jobs:
           path: |
             build/Release/flip_fluid.exe
             build/flip_fluid.exe
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    # Run this job for release events and also for pushes (to create/upload a release for each push)
-    if: github.event_name == 'release' || github.event_name == 'push'
-    steps:
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: flip_fluid-ubuntu-latest
-          path: artifacts
-        continue-on-error: true
-
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: flip_fluid-macos-latest
-          path: artifacts
-        continue-on-error: true
-
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: flip_fluid-windows
-          path: artifacts
-        continue-on-error: true
-
-      - name: Prepare release upload URL
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          # If this job was triggered by a release event, use the provided upload_url
-          if [ "${{ github.event_name }}" = "release" ]; then
-            UPLOAD_URL="${{ github.event.release.upload_url }}"
-          else
-            # For pushes, try to use the pushed tag if this is a tag push, otherwise create a release with a generated tag
-            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-              TAG_NAME="${GITHUB_REF#refs/tags/}"
-            else
-              TAG_NAME="build-${GITHUB_SHA::7}"
-            fi
-            echo "Creating release for tag: $TAG_NAME"
-            API_URL="https://api.github.com/repos/${REPO}/releases"
-            RESP=$(curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" $API_URL -d "{\"tag_name\": \"${TAG_NAME}\", \"name\": \"${TAG_NAME}\", \"body\": \"Automated build for ${TAG_NAME}\", \"draft\": false, \"prerelease\": false}")
-            # extract upload_url using python (available on runners)
-            UPLOAD_URL=$(echo "$RESP" | python - <<'PY'
-import sys, json
-j=json.load(sys.stdin)
-print(j.get('upload_url',''))
-PY
-)
-          fi
-          if [ -z "${UPLOAD_URL}" ]; then
-            echo "Failed to determine upload URL" >&2
-            exit 1
-          fi
-          # strip the template part of the upload_url ("{?name,label}")
-          RELEASE_UPLOAD_URL="${UPLOAD_URL%\{*}"
-          echo "RELEASE_UPLOAD_URL=${RELEASE_UPLOAD_URL}" > release_url.env
-      - name: Load release URL
-        run: |
-          set -e
-          source release_url.env || true
-          echo "Release URL: $RELEASE_UPLOAD_URL"
-
-      - name: Upload artifacts to GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          # read the release url
-          source release_url.env
-          echo "Uploading artifacts to: $RELEASE_UPLOAD_URL"
-          shopt -s globstar || true
-          uploaded=0
-          for f in artifacts/**; do
-            if [ -f "$f" ]; then
-              echo "Uploading $f"
-              curl -s -X POST \
-                -H "Authorization: token ${GITHUB_TOKEN}" \
-                -H "Content-Type: application/octet-stream" \
-                --data-binary @"$f" "$RELEASE_UPLOAD_URL?name=$(basename "$f")"
-              uploaded=1
-            fi
-          done
-          if [ "$uploaded" -eq 0 ]; then
-            echo "No artifacts found to upload" >&2
-            exit 1
-          fi
