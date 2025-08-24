@@ -1,38 +1,40 @@
-# A C++ port of Ten Minute Physics FLIP demo by Matthias Müller with added features
+# Um port em C++ da demonstração FLIP do Ten Minute Physics por Matthias Müller com recursos adicionais
 
-Original demo / video: https://matthias-research.github.io/pages/tenMinutePhysics/
+Demonstração/vídeo original: https://matthias-research.github.io/pages/tenMinutePhysics/
 
-A C++ port of Matthias Müller's JavaScript FLIP (Fluid-Implicit-Particle) fluid simulation demo using OpenGL for rendering.
+Uma portabilidade em C++ da demonstração de uma simulação de fluido FLIP (Fluido-Partícula Implícita) em JavaScript feita por Matthias Müller, usando OpenGL para renderização.
 
-## What is FLIP?
+## O que é FLIP?
 
-FLIP (Fluid-Implicit-Particle) is a hybrid fluid simulation method that combines the best aspects of grid-based and particle-based approaches:
+FLIP (FLuid Implicit Particle) é um método híbrido de simulação de fluidos que combina os melhores aspectos das abordagens baseadas em grade e em partículas:
 
-- **Grid-based velocity**: Uses a regular grid (MAC grid) to solve incompressible fluid equations efficiently
-- **Particle-based advection**: Particles carry velocity and other properties, avoiding numerical diffusion
-- **Hybrid transfer**: Velocities are transferred between particles and grid each timestep using interpolation
-- **PIC/FLIP blending**: Combines PIC (Particle-in-Cell) for stability and FLIP for detail preservation
+- **Velocidade baseada em grade**: Utiliza uma grade regular (grade MAC) para resolver equações de fluidos incompressíveis com eficiência
+- **Advecção baseada em partículas**: As partículas carregam velocidade e outras propriedades, evitando a difusão numérica
+- **Transferência híbrida**: As velocidades são transferidas entre as partículas e a grade a cada passo de tempo usando interpolação
+- **Combinação PIC/FLIP**: Combina PIC (Partícula na Célula) para estabilidade e FLIP para preservação de detalhes
 
-This approach provides:
-- **Incompressibility**: Proper pressure solve ensures volume conservation
-- **Detail preservation**: Particles maintain fine-scale motion and vorticity
-- **Stability**: Grid-based solve prevents particle clustering issues
-- **Efficiency**: Faster than pure particle methods for large simulations
+Esta abordagem proporciona:
+- **Incompressibilidade**: A resolução adequada da pressão garante a conservação do volume
+- **Preservação de detalhes**: As partículas mantêm o movimento e a vorticidade em escala fina
+- **Estabilidade**: A resolução baseada em grade evita problemas de agrupamento de partículas
+- **Eficiência**: Mais rápido do que métodos de partículas puras para simulações de grande porte
 
-The simulation pipeline: integrate particles → separate particles → handle collisions → transfer to grid → solve pressure → transfer back to particles.
+O pipeline de simulação: integrar partículas → separar partículas → lidar com colisões → transferir para a grade → resolver a pressão → transferir de volta para as partículas.
 
-## Features
+## Recursos
 
-- FLIP/PIC fluid simulation with hybrid particle-grid method
-- Interactive obstacle manipulation with mouse drag
-- Real-time particle and grid visualization with color mapping
-- Adjustable simulation parameters via ImGui interface
-- 2D gravity vector control (X and Y components)
-- Particle separation and collision handling
-- Density-based drift compensation
-- Cross-platform support (Linux, macOS, Windows)
-- Theoretically works out the box (not sure about macOS)
+- Simulação de fluidos FLIP/PIC com método híbrido de partículas e grade
+- Manipulação interativa de obstáculos com arrastar do mouse
+- Visualização de partículas e grade em tempo real com mapeamento de cores
+- Parâmetros de simulação ajustáveis ​​via interface ImGui
+- Controle vetorial de gravidade 2D (componentes X e Y)
+- Separação de partículas e tratamento de colisões
+- Compensação de deriva baseada em densidade
+- Suporte multiplataforma (Linux, macOS, Windows)
+- Teoricamente funciona imediatamente (não tenho certeza sobre macOS)
 
-## License
+## Licença
 
-- MIT License (same as original JavaScript version)
+- Licença MIT (mesma da versão original em JavaScript)
+
+Eu traduzi o readme com o google tradutor, então não tá muito bom, talvez em outro momento eu reescreva do zero
