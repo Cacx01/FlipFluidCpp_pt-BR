@@ -738,6 +738,7 @@ struct Scene {
     bool showParticles = false;
     bool showGrid = true;
     bool showGridLines = false;
+    bool showFramerate = false;
     FlipFluid* fluid = nullptr;
     
     float simWidth = 0.0f, simHeight = 0.0f;
@@ -1422,7 +1423,31 @@ int main(int argc, char** argv) {
         ImGui::SliderFloat("Gravity Y", &scene.gravityY, -20.0f, 20.0f);
         ImGui::Checkbox("Compensate Drift", &scene.compensateDrift);
         ImGui::Checkbox("Separate Particles", &scene.separateParticles);
+        ImGui::Checkbox("Show Framerate", &scene.showFramerate);
         ImGui::End();
+        
+        // Framerate counter (separate window)
+        if (scene.showFramerate) {
+            static float frameTime = 0.0f;
+            static int frameCount = 0;
+            static auto lastTime = std::chrono::high_resolution_clock::now();
+            
+            frameCount++;
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration<float>(currentTime - lastTime).count();
+            
+            if (elapsed >= 0.5f) { // Update every 0.5 seconds
+                frameTime = elapsed / frameCount;
+                frameCount = 0;
+                lastTime = currentTime;
+            }
+            
+            ImGui::Begin("Framerate", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
+            ImGui::SetWindowPos(ImVec2(10, 250), ImGuiCond_FirstUseEver);
+            ImGui::Text("FPS: %.1f", 1.0f / frameTime);
+            ImGui::Text("Frame time: %.2f ms", frameTime * 1000.0f);
+            ImGui::End();
+        }
         
         if (!scene.paused) {
             scene.fluid->simulate(scene.dt, scene.gravityX, scene.gravityY, scene.flipRatio, 
