@@ -35,6 +35,10 @@ jobs:
           git clone https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
           & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
           & $env:GITHUB_WORKSPACE\vcpkg\vcpkg.exe install glfw3:x64-windows-static
+          
+          # Debug: List installed files
+          Write-Host "Installed vcpkg files:"
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\vcpkg\installed\x64-windows-static" -Recurse -Name | Where-Object { $_ -like "*glfw*" } | ForEach-Object { Write-Host $_ }
         shell: powershell
 
       - name: Configure & build (Linux / macOS)
