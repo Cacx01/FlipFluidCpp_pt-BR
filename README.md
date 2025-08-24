@@ -1,9 +1,8 @@
 # A C++ port of Ten Minute Physics FLIP demo by Matthias Müller with added features
 
-Original author: Matthias Müller  
 Original demo / video: https://matthias-research.github.io/pages/tenMinutePhysics/
 
-A C++ port of the JavaScript FLIP (Fluid-Implicit-Particle) fluid simulation using OpenGL for rendering.
+A C++ port of Matthias Müller's JavaScript FLIP (Fluid-Implicit-Particle) fluid simulation demo using OpenGL for rendering.
 
 ## What is FLIP?
 
