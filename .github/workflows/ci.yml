@@ -1,0 +1,74 @@
+name: Build and publish binaries
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libglfw3-dev libgl1-mesa-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install cmake glfw
+
+      - name: Setup vcpkg and install glfw (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
+          & $env:GITHUB_WORKSPACE\vcpkg\bootstrap-vcpkg.bat
+          & $env:GITHUB_WORKSPACE\vcpkg\vcpkg.exe install glfw3:x64-windows
+        shell: powershell
+
+      - name: Configure & build (Linux / macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release -- -j$(nproc)
+        shell: bash
+
+      - name: Configure & build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          mkdir build
+          cd build
+          cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release
+        shell: powershell
+
+      - name: Package and upload (Linux / macOS)
+        if: matrix.os != 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flip_fluid-${{ matrix.os }}
+          path: |
+            build/flip_fluid
+            build/flip_fluid*
+
+      - name: Package and upload (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flip_fluid-windows
+          path: |
+            build/Release/flip_fluid.exe
+            build/flip_fluid.exe

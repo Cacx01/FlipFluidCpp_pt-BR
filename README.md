@@ -1,4 +1,7 @@
-# FLIP Fluid Simulation (C++)
+# A C++ port of Ten Minute Physics FLIP demo by Matthias Müller with added features
+
+Original author: Matthias Müller  
+Original demo / video: https://matthias-research.github.io/pages/tenMinutePhysics/
 
 A C++ port of the JavaScript FLIP (Fluid-Implicit-Particle) fluid simulation using OpenGL for rendering.
 
@@ -29,16 +32,6 @@ The simulation pipeline: integrate particles → separate particles → handle c
 - Particle separation and collision handling
 - Density-based drift compensation
 - Cross-platform support (Linux, macOS, Windows)
-
-## Technical Details
-
-- **Simulation Method**: FLIP with PIC blending (adjustable ratio)
-- **Grid**: MAC (Marker-and-Cell) staggered velocity grid
-- **Pressure Solver**: Successive Over-Relaxation (SOR) with configurable iterations
-- **Particle Collision**: Soft-body separation with color diffusion
-- **Obstacle Interaction**: Dynamic circular obstacles with velocity transfer
-- **Rendering**: OpenGL 3.3 Core with point sprites and instanced drawing
-- **Performance**: Single-threaded CPU simulation, optimized data structures
 
 ## Dependencies
 
@@ -121,9 +114,6 @@ cmake --build . --config Release
 # Notes:
 # - Ensure GLFW (and other deps) are installed or available as prebuilt libs and adjust CMakeLists to point to them.
 # - You can also add the glad and ImGui sources into the project (they're included in this repo layout) so an out-of-the-box CMake build works.
-```
-
-If you want, I can add a small CMakeLists.txt that sets up a portable Windows + Linux + macOS build (and a GitHub Actions workflow to produce cross-platform binaries).
 
 ## Required Directory Structure
 
@@ -193,11 +183,6 @@ Fluido/
 - Bottlenecks: Particle separation O(N²) in dense regions, pressure solve O(grid cells × iterations)
 - Optimization opportunities: Spatial hashing, GPU compute shaders, multi-threading
 
-## Original Source
-
-This is a C++ port of the JavaScript FLIP fluid simulation from Ten Minute Physics by Matthias Müller.
-Original: https://matthias-research.github.io/pages/tenMinutePhysics/
-
 ## License
 
-MIT License (same as original JavaScript version)
+- MIT License (same as original JavaScript version)
