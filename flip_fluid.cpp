@@ -137,6 +137,9 @@ public:
     std::vector<float> p, s;
     std::vector<int> cellType;
     std::vector<float> cellColor;
+    // Reusable accumulators to avoid per-frame allocations in updateCellColors()
+    std::vector<float> cellAccum;
+    std::vector<int> cellCounts;
     
     // Particles
     int maxParticles;
@@ -175,6 +178,9 @@ public:
         s.resize(fNumCells, 0.0f);
         cellType.resize(fNumCells, 0);
         cellColor.resize(3 * fNumCells, 0.0f);
+        // allocate reusable accumulation buffers
+        cellAccum.resize(3 * fNumCells, 0.0f);
+        cellCounts.resize(fNumCells, 0);
         
         // Initialize particles
         maxParticles = maxParticles_;
@@ -307,29 +313,31 @@ public:
     void handleParticleCollisions(float obstacleX, float obstacleY, float obstacleRadius, float obstacleVelX, float obstacleVelY) {
         float h_ = 1.0f / fInvSpacing;
         float r = particleRadius;
-        float minDist = obstacleRadius + r;
-        float minDist2 = minDist * minDist;
-        
         float minX = h_ + r;
         float maxX = (fNumX - 1) * h_ - r;
         float minY = h_ + r;
         float maxY = (fNumY - 1) * h_ - r;
-        
+
+        bool obstacleActive = (obstacleRadius > 0.0f);
+        float minDist = obstacleRadius + r;
+        float minDist2 = minDist * minDist;
+
         for (int i = 0; i < numParticles; i++) {
             float x = particlePos[2 * i];
             float y = particlePos[2 * i + 1];
-            
-            float dx = x - obstacleX;
-            float dy = y - obstacleY;
-            float d2 = dx * dx + dy * dy;
-            
-            // obstacle collision
-            if (d2 < minDist2) {
-                particleVel[2 * i] = obstacleVelX;
-                particleVel[2 * i + 1] = obstacleVelY;
+
+            if (obstacleActive) {
+                float dx = x - obstacleX;
+                float dy = y - obstacleY;
+                float d2 = dx * dx + dy * dy;
+                // obstacle collision: only when obstacle is active
+                if (d2 < minDist2) {
+                    particleVel[2 * i] = obstacleVelX;
+                    particleVel[2 * i + 1] = obstacleVelY;
+                }
             }
-            
-            // wall collisions
+
+            // wall collisions (always applied)
             if (x < minX) {
                 x = minX;
                 particleVel[2 * i] = 0.0f;
@@ -346,7 +354,7 @@ public:
                 y = maxY;
                 particleVel[2 * i + 1] = 0.0f;
             }
-            
+
             particlePos[2 * i] = x;
             particlePos[2 * i + 1] = y;
         }
@@ -622,23 +630,25 @@ public:
     }
 
     void updateCellColors() {
-        // Compute average particle colors per grid cell
-        std::vector<float> accum(3 * fNumCells, 0.0f);
-        std::vector<int> counts(fNumCells, 0);
+        // Compute average particle colors per grid cell using preallocated buffers to avoid allocations
         float h1 = fInvSpacing;
 
+        // reset accumulators
+        std::fill(cellAccum.begin(), cellAccum.end(), 0.0f);
+        std::fill(cellCounts.begin(), cellCounts.end(), 0);
+        
         for (int i = 0; i < numParticles; i++) {
             float x = particlePos[2 * i];
             float y = particlePos[2 * i + 1];
-            int xi = static_cast<int>(std::floor(x * h1));
-            int yi = static_cast<int>(std::floor(y * h1));
+            int xi = static_cast<int>(x * h1);
+            int yi = static_cast<int>(y * h1);
             xi = std::max(0, std::min(xi, fNumX - 1));
             yi = std::max(0, std::min(yi, fNumY - 1));
             int cellNr = xi * fNumY + yi;
-            counts[cellNr]++;
-            accum[3 * cellNr + 0] += particleColor[3 * i + 0];
-            accum[3 * cellNr + 1] += particleColor[3 * i + 1];
-            accum[3 * cellNr + 2] += particleColor[3 * i + 2];
+            cellCounts[cellNr]++;
+            cellAccum[3 * cellNr + 0] += particleColor[3 * i + 0];
+            cellAccum[3 * cellNr + 1] += particleColor[3 * i + 1];
+            cellAccum[3 * cellNr + 2] += particleColor[3 * i + 2];
         }
 
         // Clear cell colors
@@ -650,11 +660,11 @@ public:
                 cellColor[3 * i + 1] = 0.5f;
                 cellColor[3 * i + 2] = 0.5f;
             } else if (cellType[i] == FLUID_CELL) {
-                if (counts[i] > 0) {
-                    float inv = 1.0f / static_cast<float>(counts[i]);
-                    float r = accum[3 * i + 0] * inv;
-                    float g = accum[3 * i + 1] * inv;
-                    float b = accum[3 * i + 2] * inv;
+                if (cellCounts[i] > 0) {
+                    float inv = 1.0f / static_cast<float>(cellCounts[i]);
+                    float r = cellAccum[3 * i + 0] * inv;
+                    float g = cellAccum[3 * i + 1] * inv;
+                    float b = cellAccum[3 * i + 2] * inv;
                     // Clamp just in case
                     cellColor[3 * i] = std::min(std::max(r, 0.0f), 1.0f);
                     cellColor[3 * i + 1] = std::min(std::max(g, 0.0f), 1.0f);
@@ -703,18 +713,20 @@ struct Scene {
     float gravityY = -9.81f;
     float dt = 1.0f / 60.0f;
     float flipRatio = 0.9f;
-    int numPressureIters = 50;
+    int numPressureIters = 25;
     int numParticleIters = 2;
     int frameNr = 0;
     float overRelaxation = 1.9f;
     bool compensateDrift = true;
     bool separateParticles = true;
     float obstacleX = 0.0f, obstacleY = 0.0f, obstacleRadius = 0.15f;
-    bool paused = true;
-    bool showObstacle = true;
+    bool paused = false;
+    bool showObstacle = false; // collisions di400sabled until user clicks
+    // Separate flag to control only rendering of the obstacle. Keep collisions using showObstacle.
+    bool renderObstacle = false;
     float obstacleVelX = 0.0f, obstacleVelY = 0.0f;
-    bool showParticles = true;
-    bool showGrid = false;
+    bool showParticles = false;
+    bool showGrid = true;
     FlipFluid* fluid = nullptr;
     
     float simWidth = 0.0f, simHeight = 0.0f;
@@ -728,15 +740,35 @@ struct GLObjects {
     GLuint particleVBO = 0, particleColorVBO = 0;
     GLuint diskVBO = 0, diskEBO = 0;
     GLuint globalVAO = 0;
+    // VAOs to store vertex attribute state so we don't reconfigure every frame
+    GLuint gridVAO = 0, particleVAO = 0, diskVAO = 0;
+
+    // Cached uniform locations for point shader
+    GLint point_dom_loc = -1;
+    GLint point_psize_loc = -1;
+    GLint point_drawDisk_loc = -1;
+
+    // Cached uniform locations for mesh shader
+    GLint mesh_dom_loc = -1;
+    GLint mesh_color_loc = -1;
+    GLint mesh_tr_loc = -1;
+    GLint mesh_sc_loc = -1;
 } glb;
 
 // --- Buffer creation helpers ---
 void createOrUpdateGridVBO() {
     auto& f = *scene.fluid;
     if (glb.gridVBO == 0) glGenBuffers(1, &glb.gridVBO);
-    if (glb.gridColorVBO == 0) glGenBuffers(1, &glb.gridColorVBO);
+    if (glb.gridColorVBO == 0) {
+        glGenBuffers(1, &glb.gridColorVBO);
+        // allocate buffer once for dynamic updates
+        glBindBuffer(GL_ARRAY_BUFFER, glb.gridColorVBO);
+        glBufferData(GL_ARRAY_BUFFER, f.cellColor.size() * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
     
-    std::vector<float> cellCenters(2 * f.fNumCells);
+    static std::vector<float> cellCenters; // persistent to avoid reallocations
+    cellCenters.resize(2 * f.fNumCells);
     int p = 0;
     for (int i = 0; i < f.fNumX; i++) {
         for (int j = 0; j < f.fNumY; j++) {
@@ -748,20 +780,64 @@ void createOrUpdateGridVBO() {
     glBindBuffer(GL_ARRAY_BUFFER, glb.gridVBO);
     glBufferData(GL_ARRAY_BUFFER, cellCenters.size() * sizeof(float), cellCenters.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    // Setup/grid VAO once
+    if (glb.gridVAO == 0) {
+        glGenVertexArrays(1, &glb.gridVAO);
+        glBindVertexArray(glb.gridVAO);
+
+        glBindBuffer(GL_ARRAY_BUFFER, glb.gridVBO);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, glb.gridColorVBO);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
 }
 
 void createParticleVBOs() {
     if (glb.particleVBO == 0) glGenBuffers(1, &glb.particleVBO);
     if (glb.particleColorVBO == 0) glGenBuffers(1, &glb.particleColorVBO);
+    // allocate once to the maximum size to avoid repeated allocations; actual updates will use glBufferSubData
+    if (scene.fluid) {
+        auto& f = *scene.fluid;
+        glBindBuffer(GL_ARRAY_BUFFER, glb.particleVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * f.maxParticles, nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, glb.particleColorVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3 * f.maxParticles, nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+
+    // Setup particle VAO once
+    if (glb.particleVAO == 0) {
+        glGenVertexArrays(1, &glb.particleVAO);
+        glBindVertexArray(glb.particleVAO);
+
+        glBindBuffer(GL_ARRAY_BUFFER, glb.particleVBO);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, glb.particleColorVBO);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
 }
 
+// Create disk mesh buffers (triangle fan) for obstacle rendering
 void createDiskBuffers() {
     const int numSegs = 50;
     if (glb.diskVBO == 0) {
         glGenBuffers(1, &glb.diskVBO);
         std::vector<float> diskVerts(2 * (numSegs + 1));
         diskVerts[0] = 0.0f; diskVerts[1] = 0.0f;
-        float dphi = 2.0f * M_PI / numSegs;
+        float dphi = 2.0f * static_cast<float>(M_PI) / numSegs;
         for (int i = 0; i < numSegs; i++) {
             diskVerts[2 * (i + 1)] = std::cos(i * dphi);
             diskVerts[2 * (i + 1) + 1] = std::sin(i * dphi);
@@ -782,6 +858,23 @@ void createDiskBuffers() {
         }
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, glb.diskEBO);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, diskIds.size() * sizeof(unsigned short), diskIds.data(), GL_STATIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    }
+
+    // Setup disk VAO once
+    if (glb.diskVAO == 0) {
+        glGenVertexArrays(1, &glb.diskVAO);
+        glBindVertexArray(glb.diskVAO);
+
+        glBindBuffer(GL_ARRAY_BUFFER, glb.diskVBO);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+        // bind element buffer to VAO
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, glb.diskEBO);
+
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
 }
@@ -821,7 +914,66 @@ void setObstacle(FlipFluid& f, float x, float y, bool reset) {
     scene.obstacleVelY = vy;
 }
 
-void setupScene(float canvasWidth, float canvasHeight) {
+// Remove any obstacle from the grid (restore interior cells to fluid)
+void removeObstacle(FlipFluid& f) {
+    int n = f.fNumY;
+    // mark cells that currently are obstacle (solid) but not the tank walls
+    std::vector<char> wasObstacle(f.fNumCells, 0);
+    for (int i = 1; i < f.fNumX - 1; ++i) {
+        for (int j = 1; j < f.fNumY - 1; ++j) {
+            int idx = i * n + j;
+            if (f.s[idx] == 0.0f) wasObstacle[idx] = 1;
+        }
+    }
+
+    // restore s: walls remain solid, interior become fluid
+    for (int i = 0; i < f.fNumX; ++i) {
+        for (int j = 0; j < f.fNumY; ++j) {
+            int idx = i * n + j;
+            if (i == 0 || i == f.fNumX - 1 || j == 0 || j == f.fNumY - 1) {
+                f.s[idx] = 0.0f; // wall
+            } else {
+                f.s[idx] = 1.0f; // fluid
+            }
+        }
+    }
+
+    // For cells that were obstacle, repair velocity fields by averaging neighbor velocities
+    for (int i = 1; i < f.fNumX - 1; ++i) {
+        for (int j = 1; j < f.fNumY - 1; ++j) {
+            int idx = i * n + j;
+            if (!wasObstacle[idx]) continue;
+
+            float sumU = 0.0f, sumV = 0.0f;
+            int cnt = 0;
+            const int ni[4] = { -1, 1, 0, 0 };
+            const int nj[4] = { 0, 0, -1, 1 };
+            for (int k = 0; k < 4; ++k) {
+                int ii = i + ni[k];
+                int jj = j + nj[k];
+                int nidx = ii * n + jj;
+                if (f.s[nidx] != 0.0f) { // not solid
+                    sumU += f.u[nidx];
+                    sumV += f.v[nidx];
+                    cnt++;
+                }
+            }
+            float avgU = (cnt > 0) ? (sumU / cnt) : 0.0f;
+            float avgV = (cnt > 0) ? (sumV / cnt) : 0.0f;
+            f.u[idx] = avgU;
+            f.v[idx] = avgV;
+            f.prevU[idx] = avgU;
+            f.prevV[idx] = avgV;
+            f.du[idx] = 0.0f;
+            f.dv[idx] = 0.0f;
+        }
+    }
+
+    scene.showObstacle = false;
+    scene.obstacleVelX = scene.obstacleVelY = 0.0f;
+}
+
+void setupScene(float canvasWidth, float canvasHeight, int res) {
     float simHeight = 3.0f;
     float cScale = canvasHeight / simHeight;
     float simWidth = canvasWidth / cScale;
@@ -834,7 +986,6 @@ void setupScene(float canvasWidth, float canvasHeight) {
     scene.numPressureIters = 50;
     scene.numParticleIters = 2;
     
-    int res = 100;
     float tankHeight = 1.0f * simHeight;
     float tankWidth = 1.0f * simWidth;
     float h = tankHeight / res;
@@ -878,7 +1029,7 @@ void setupScene(float canvasWidth, float canvasHeight) {
         }
     }
     
-    setObstacle(*f, 3.0f, 2.0f, true);
+    // no initial obstacle; obstacle will be created when the user clicks
 }
 
 // ----------------------------- Drawing -----------------------------
@@ -900,36 +1051,42 @@ void draw() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
     
-    if (glb.pointProg == 0) glb.pointProg = linkProgram(POINT_VS, POINT_FS);
-    if (glb.meshProg == 0) glb.meshProg = linkProgram(MESH_VS, MESH_FS);
+    if (glb.pointProg == 0) {
+        glb.pointProg = linkProgram(POINT_VS, POINT_FS);
+        // cache uniform locations
+        glUseProgram(glb.pointProg);
+        glb.point_dom_loc = glGetUniformLocation(glb.pointProg, "domainSize");
+        glb.point_psize_loc = glGetUniformLocation(glb.pointProg, "pointSize");
+        glb.point_drawDisk_loc = glGetUniformLocation(glb.pointProg, "drawDisk");
+    }
+    if (glb.meshProg == 0) {
+        glb.meshProg = linkProgram(MESH_VS, MESH_FS);
+        // cache uniform locations
+        glUseProgram(glb.meshProg);
+        glb.mesh_dom_loc = glGetUniformLocation(glb.meshProg, "domainSize");
+        glb.mesh_color_loc = glGetUniformLocation(glb.meshProg, "color");
+        glb.mesh_tr_loc = glGetUniformLocation(glb.meshProg, "translation");
+        glb.mesh_sc_loc = glGetUniformLocation(glb.meshProg, "scale");
+    }
     
     // Grid
-    if (glb.gridVBO == 0) createOrUpdateGridVBO();
+    if (glb.gridVBO == 0 || glb.gridVAO == 0) createOrUpdateGridVBO();
     if (scene.showGrid) {
         auto& f = *scene.fluid;
         glUseProgram(glb.pointProg);
-        GLint dom = glGetUniformLocation(glb.pointProg, "domainSize");
-        GLint psize = glGetUniformLocation(glb.pointProg, "pointSize");
-        GLint dd = glGetUniformLocation(glb.pointProg, "drawDisk");
-        glUniform2f(dom, scene.simWidth, scene.simHeight);
-        float pointSize = 0.9f * f.h / scene.simWidth * width;
-        glUniform1f(psize, pointSize);
-        glUniform1f(dd, 0.0f);
+        glUniform2f(glb.point_dom_loc, scene.simWidth, scene.simHeight);
+        // Compute a consistent pixel scale from simulation units to screen pixels
+        float pixelScale = std::min(static_cast<float>(width) / scene.simWidth, static_cast<float>(height) / scene.simHeight);
+        float pointSize = 0.8f * f.h * pixelScale;
+        glUniform1f(glb.point_psize_loc, pointSize);
+        glUniform1f(glb.point_drawDisk_loc, 0.0f);
         
-        glBindBuffer(GL_ARRAY_BUFFER, glb.gridVBO);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
-        
+        // Update colors and draw using VAO
         glBindBuffer(GL_ARRAY_BUFFER, glb.gridColorVBO);
-        glBufferData(GL_ARRAY_BUFFER, scene.fluid->cellColor.size() * sizeof(float), 
-                     scene.fluid->cellColor.data(), GL_DYNAMIC_DRAW);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-        
+        glBufferSubData(GL_ARRAY_BUFFER, 0, scene.fluid->cellColor.size() * sizeof(float), scene.fluid->cellColor.data());
+        glBindVertexArray(glb.gridVAO);
         glDrawArrays(GL_POINTS, 0, scene.fluid->fNumCells);
-        
-        glDisableVertexAttribArray(0);
-        glDisableVertexAttribArray(1);
+        glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
     
@@ -937,52 +1094,38 @@ void draw() {
     if (scene.showParticles) {
         auto& f = *scene.fluid;
         glUseProgram(glb.pointProg);
-        GLint dom = glGetUniformLocation(glb.pointProg, "domainSize");
-        GLint psize = glGetUniformLocation(glb.pointProg, "pointSize");
-        GLint dd = glGetUniformLocation(glb.pointProg, "drawDisk");
-        glUniform2f(dom, scene.simWidth, scene.simHeight);
-        float pointSize = 2.0f * f.particleRadius / scene.simWidth * width;
-        glUniform1f(psize, pointSize);
-        glUniform1f(dd, 1.0f);
+        glUniform2f(glb.point_dom_loc, scene.simWidth, scene.simHeight);
+        // Use the same pixelScale approach for particle sizes so they match grid scaling
+        float pixelScale = std::min(static_cast<float>(width) / scene.simWidth, static_cast<float>(height) / scene.simHeight);
+        float pointSize = 2.0f * f.particleRadius * pixelScale;
+        glUniform1f(glb.point_psize_loc, pointSize);
+        glUniform1f(glb.point_drawDisk_loc, 1.0f);
         
         createParticleVBOs();
+        // update buffers and draw using VAO
         glBindBuffer(GL_ARRAY_BUFFER, glb.particleVBO);
-        glBufferData(GL_ARRAY_BUFFER, f.particlePos.size() * sizeof(float), 
-                     f.particlePos.data(), GL_DYNAMIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
-        
+        glBufferSubData(GL_ARRAY_BUFFER, 0, f.numParticles * 2 * sizeof(float), f.particlePos.data());
         glBindBuffer(GL_ARRAY_BUFFER, glb.particleColorVBO);
-        glBufferData(GL_ARRAY_BUFFER, f.particleColor.size() * sizeof(float), 
-                     f.particleColor.data(), GL_DYNAMIC_DRAW);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-        
+        glBufferSubData(GL_ARRAY_BUFFER, 0, f.numParticles * 3 * sizeof(float), f.particleColor.data());
+        glBindVertexArray(glb.particleVAO);
         glDrawArrays(GL_POINTS, 0, f.numParticles);
-        
-        glDisableVertexAttribArray(0);
-        glDisableVertexAttribArray(1);
+        glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
     
-    // Obstacle disk
-    createDiskBuffers();
-    glUseProgram(glb.meshProg);
-    GLint dom = glGetUniformLocation(glb.meshProg, "domainSize");
-    GLint col = glGetUniformLocation(glb.meshProg, "color");
-    GLint tr = glGetUniformLocation(glb.meshProg, "translation");
-    GLint sc = glGetUniformLocation(glb.meshProg, "scale");
-    glUniform2f(dom, scene.simWidth, scene.simHeight);
-    glUniform3f(col, 1.0f, 0.0f, 0.0f);
-    glUniform2f(tr, scene.obstacleX, scene.obstacleY);
-    glUniform1f(sc, scene.obstacleRadius + scene.fluid->particleRadius);
-    
-    glBindBuffer(GL_ARRAY_BUFFER, glb.diskVBO);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, glb.diskEBO);
-    glDrawElements(GL_TRIANGLES, 3 * 50, GL_UNSIGNED_SHORT, 0);
-    glDisableVertexAttribArray(0);
+    // Obstacle disk: render only if renderObstacle is true. Collision state still uses showObstacle
+    if (scene.renderObstacle) {
+        createDiskBuffers();
+        glUseProgram(glb.meshProg);
+        glUniform2f(glb.mesh_dom_loc, scene.simWidth, scene.simHeight);
+        glUniform3f(glb.mesh_color_loc, 1.0f, 0.0f, 0.0f);
+        glUniform2f(glb.mesh_tr_loc, scene.obstacleX, scene.obstacleY);
+        glUniform1f(glb.mesh_sc_loc, scene.obstacleRadius + scene.fluid->particleRadius);
+         
+        glBindVertexArray(glb.diskVAO);
+        glDrawElements(GL_TRIANGLES, 3 * 50, GL_UNSIGNED_SHORT, 0);
+        glBindVertexArray(0);
+    }
 }
 
 // ----------------------------- Input -----------------------------
@@ -1025,8 +1168,8 @@ void drag(double x, double y, GLFWwindow* win) {
 
 void endDrag() {
     mouseDown = false;
-    scene.obstacleVelX = 0.0f;
-    scene.obstacleVelY = 0.0f;
+    // remove obstacle when mouse released so collisions only occur while clicking
+    if (scene.fluid) removeObstacle(*scene.fluid);
 }
 
 // ------------------------------ Main ------------------------------
@@ -1058,6 +1201,14 @@ int main() {
         try { winH = std::max(100, std::stoi(inH)); } catch(...) { /* keep default */ }
     }
 
+    // Prompt user for grid resolution (number of cells along height)
+    int gridRes = 100;
+    std::cout << "Enter grid resolution (cells along height, default 100): ";
+    std::string inRes; std::getline(std::cin, inRes);
+    if (!inRes.empty()) {
+        try { gridRes = std::max(10, std::min(2000, std::stoi(inRes))); } catch(...) { /* keep default */ }
+    }
+
     GLFWwindow* win = glfwCreateWindow(winW, winH, "FLIP Fluid (C++/OpenGL)", nullptr, nullptr);
     if (!win) {
         fprintf(stderr, "Window create failed\n");
@@ -1076,7 +1227,7 @@ int main() {
     if (glb.globalVAO == 0) glGenVertexArrays(1, &glb.globalVAO);
     glBindVertexArray(glb.globalVAO);
     
-    setupScene(static_cast<float>(winW), static_cast<float>(winH));
+    setupScene(static_cast<float>(winW), static_cast<float>(winH), gridRes);
     
     // ImGui setup
     IMGUI_CHECKVERSION();
@@ -1132,7 +1283,7 @@ int main() {
                                         scene.numPressureIters, scene.numParticleIters,
                                         scene.overRelaxation, scene.compensateDrift, 
                                         scene.separateParticles, scene.obstacleX, 
-                                        scene.obstacleY, scene.obstacleRadius,
+                                        scene.obstacleY, (scene.showObstacle ? scene.obstacleRadius : 0.0f),
                                         scene.obstacleVelX, scene.obstacleVelY);
                     scene.frameNr++;
                     scene.paused = true;
@@ -1156,9 +1307,11 @@ int main() {
         ImGui::Begin("Simulation Controls", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
         ImGui::SetWindowPos(ImVec2(10, 10), ImGuiCond_Always);
         ImGui::Checkbox("Paused", &scene.paused);
+        ImGui::SliderFloat("Simulation Speed", &scene.dt, 0.001f, 0.1f, "%.4f");
         ImGui::SliderFloat("Flip Ratio", &scene.flipRatio, 0.0f, 1.0f);
         ImGui::Checkbox("Show Particles", &scene.showParticles);
         ImGui::Checkbox("Show Grid", &scene.showGrid);
+        ImGui::Checkbox("Render Obstacle", &scene.renderObstacle);
         ImGui::SliderFloat("Gravity X", &scene.gravityX, -20.0f, 20.0f);
         ImGui::SliderFloat("Gravity Y", &scene.gravityY, -20.0f, 20.0f);
         ImGui::Checkbox("Compensate Drift", &scene.compensateDrift);
@@ -1170,7 +1323,7 @@ int main() {
                                 scene.numPressureIters, scene.numParticleIters,
                                 scene.overRelaxation, scene.compensateDrift, 
                                 scene.separateParticles, scene.obstacleX, 
-                                scene.obstacleY, scene.obstacleRadius,
+                                scene.obstacleY, (scene.showObstacle ? scene.obstacleRadius : 0.0f),
                                 scene.obstacleVelX, scene.obstacleVelY);
             scene.frameNr++;
         }
