@@ -88,6 +88,43 @@ g++ -std=c++20 flip_fluid.cpp glad/src/glad.c imgui/*.cpp imgui/backends/imgui_i
     -o flip_fluid
 ```
 
+### Windows (MSYS2 / MinGW and Visual Studio)
+
+Windows has two common workflows — a MinGW/MSYS2 toolchain or the native Visual Studio/MSVC toolchain.
+
+1) MSYS2 / MinGW (quick, command-line):
+
+```bash
+# from an MSYS2 MinGW64 shell
+# install required packages once:
+pacman -Syu
+pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-glfw mingw-w64-x86_64-toolchain
+
+# build (adjust include paths if your imgui/glad folders are elsewhere):
+g++ -std=c++17 -O2 flip_fluid.cpp glad/src/glad.c imgui/*.cpp imgui/backends/imgui_impl_*.cpp \
+    -Iglad/include -Iimgui -Iimgui/backends \
+    -L/mingw64/lib -lglfw3 -lopengl32 -lgdi32 -o flip_fluid.exe
+
+# If linking fails, use pkg-config to find flags (if available):
+# g++ ... $(pkg-config --cflags --libs glfw3)
+```
+
+2) Visual Studio / CMake (recommended for IDE and debugging):
+
+```
+# Generate a Visual Studio solution using CMake (from a Developer Command Prompt or PowerShell):
+md build && cd build
+cmake -G "Visual Studio 17 2022" ..
+# or choose the generator matching your VS version
+cmake --build . --config Release
+
+# Notes:
+# - Ensure GLFW (and other deps) are installed or available as prebuilt libs and adjust CMakeLists to point to them.
+# - You can also add the glad and ImGui sources into the project (they're included in this repo layout) so an out-of-the-box CMake build works.
+```
+
+If you want, I can add a small CMakeLists.txt that sets up a portable Windows + Linux + macOS build (and a GitHub Actions workflow to produce cross-platform binaries).
+
 ## Required Directory Structure
 
 Make sure you have the following directories and files:
