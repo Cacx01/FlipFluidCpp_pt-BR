@@ -12,6 +12,13 @@
 #include <algorithm>
 #include <iostream>
 
+#ifdef __linux__
+#include <unistd.h>
+#include <limits.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#endif
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
